@@ -1,76 +1,90 @@
-# iVisio — 10x Visium Spatial-Omics Platform
+# iVisio — Spatial Omics Platform
 
-iVisio is a self-contained [R Shiny](https://shiny.posit.co/) application for
-end-to-end analysis of 10x Genomics **Visium** spatial transcriptomics data. It
-takes Space Ranger output and walks you through a complete workflow — from
-loading and QC through clustering, spatial mapping, marker discovery, cell-type
-deconvolution, and report export — in an interactive, tabbed interface.
+iVisio is a full-stack web application for end-to-end analysis of **10x Genomics
+Visium** spatial transcriptomics data. It takes Space Ranger output and guides
+you through the complete workflow — load, QC, normalization, clustering, spatial
+mapping, marker/DE discovery, cell-type deconvolution, AI-assisted annotation,
+pathway enrichment, and cell-cell communication — in an interactive, tabbed UI,
+with every result table and object available for download.
 
-## Workflow
+> **Note:** iVisio was originally prototyped as an R Shiny app (preserved for
+> reference at [`legacy/app.R`](legacy/app.R)). It has been re-platformed to a
+> **Python (FastAPI + scanpy/squidpy) backend** and a **React + TypeScript
+> (Vite) frontend**.
 
-The app is organized as a numbered set of tabs that mirror a standard Visium
-analysis pipeline:
+## Architecture
 
-| # | Tab | What it does |
-|---|-----|--------------|
-| 1 | **Load** | Upload the filtered `.h5` matrix, tissue image, scale factors, and tissue positions (plus optional metadata CSV) |
-| 2 | **QC** | Compute per-spot counts/features/mitochondrial % and apply filters |
-| 3 | **Normalize** | LogNormalize or SCTransform, variable feature selection, and PCA |
-| 4 | **Clusters** | Nearest-neighbor graph, UMAP, and Louvain clustering |
-| 5 | **Spatial map** | Overlay gene expression or cluster labels on the tissue image |
-| 6 | **Explore** | Plot individual features and score custom gene signatures |
-| 7 | **Markers / DE** | Cluster markers and pairwise differential expression (fast vectorized or Seurat Wilcoxon) |
-| 8 | **STIE** | Integrate spot expression with nuclear morphology for cell-level typing (requires the STIE package) |
-| 9 | **Reference / Deconvolution** | Estimate cell-type proportions per spot from a reference signature (NNLS) |
-| 10 | **Spatially variable** | Identify spatially variable features |
-| 11 | **Export** | Download the Seurat object, tables, spot metadata, and an HTML report |
-
-## Input
-
-The **Load** tab accepts each Space Ranger file separately (this avoids large
-multi-file requests and works with GSM-prefixed filenames):
-
-1. `filtered_feature_bc_matrix.h5` — filtered expression matrix
-2. Tissue image — `tissue_hires_image.png` (or `.jpg`/`.jpeg`)
-3. `scalefactors_json.json` — scale factors
-4. `tissue_positions_list.csv` / `tissue_positions.csv` — spot positions
-
-An optional metadata CSV (with a `barcode` column) can be joined onto the spots.
-
-## Requirements
-
-Dependencies are **not** installed by the app — install them once in a separate
-R session before launching:
-
-```r
-install.packages(c(
-  "shiny", "bslib", "shinycssloaders", "DT", "plotly", "ggplot2",
-  "dplyr", "readr", "tidyr", "zip", "rmarkdown", "png", "jsonlite"
-))
-if (!requireNamespace("BiocManager", quietly = TRUE)) install.packages("BiocManager")
-BiocManager::install(c("Seurat", "SeuratObject", "sp", "sctransform", "SummarizedExperiment"))
+```
+┌──────────────────────────┐        REST / JSON        ┌───────────────────────────┐
+│  React + TypeScript (Vite)│  ───────────────────────▶ │  FastAPI + scanpy/squidpy  │
+│  Plotly visualizations    │  ◀─────────────────────── │  AnnData session store     │
+│  12-step tabbed workflow  │        CSV / .h5ad         │  scanpy / squidpy / gseapy │
+└──────────────────────────┘                            └───────────────────────────┘
+        frontend/                                                backend/
 ```
 
-The optional **STIE** integration can be installed from within the app (tab 8)
-or manually:
+- **backend/** — FastAPI service wrapping a scanpy pipeline. See
+  [`backend/README.md`](backend/README.md) for the full R→Python feature-parity
+  table and API reference.
+- **frontend/** — React + TypeScript SPA (Vite) with Plotly charts and an
+  interactive tissue overlay.
 
-```r
-install.packages(c("quadprog", "magick", "remotes"))
-remotes::install_github("zhushijia/STIE")
+## Workflow (frontend tabs)
+
+| # | Tab | Backend capability |
+|---|-----|--------------------|
+| 1 | Load | Assemble AnnData from the 4 Space Ranger files + optional metadata |
+| 2 | QC | Counts / genes / mito %, distributions, and filtering |
+| 3 | Normalize | LogNormalize or Pearson residuals (SCT analog) + PCA |
+| 4 | Clusters | Leiden clustering + UMAP |
+| 5 | Spatial map | Expression / label overlay on the tissue image |
+| 6 | Explore | Feature-on-UMAP + custom signature scoring |
+| 7 | Markers / DE | `rank_genes_groups` markers and pairwise DE |
+| 8 | Spatially variable | Moran's I via squidpy |
+| 9 | Deconvolution | NNLS reference deconvolution |
+| 10 | AI & Enrichment | Local Jaccard cell-type annotation + gseapy enrichment |
+| 11 | Cell-Cell Comm. | squidpy `ligrec` (CellChat analog) |
+| 12 | Export | Download every table (CSV), the AnnData (.h5ad), and an HTML report |
+
+## Quick start (Docker)
+
+```bash
+docker compose up --build
 ```
 
-## Running
+- Frontend: http://localhost:8080
+- Backend API docs: http://localhost:8000/docs
 
-```r
-shiny::runApp("app.R")
+## Local development
+
+**Backend**
+```bash
+cd backend
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
 ```
 
-### Deployment notes
+**Frontend**
+```bash
+cd frontend
+npm install
+npm run dev      # http://localhost:5173 (proxies /api to :8000)
+```
 
-- The app disables Shiny's internal request-size cap (`shiny.maxRequestSize`),
-  but reverse proxies and hosting platforms enforce their own limits. For nginx,
-  set `client_max_body_size 0;` (or a large finite value). Raise the equivalent
-  limit for Apache (`LimitRequestBody`), Posit Connect, shinyapps.io, Kubernetes
-  ingress, or your cloud load balancer.
-- The app intentionally does not install packages at startup or execute uploaded
-  files.
+## Downloads
+
+Everything the platform computes is downloadable from the **Export** tab (or
+directly at `GET /api/{session}/download/{artifact}`): marker/DE/SVG/AI/
+enrichment/ligand-receptor/deconvolution tables and reference signature (CSV),
+the spot metadata table (CSV), the full **AnnData `.h5ad`** object, and a
+self-contained **HTML report**.
+
+## Deployment notes
+
+- Visium uploads are large. The bundled nginx config sets `client_max_body_size 0`;
+  set a finite value if your platform requires one, and raise equivalent limits on
+  any upstream load balancer / ingress.
+- Optional analysis packages (`squidpy`, `gseapy`, `harmonypy`) degrade gracefully:
+  if one is missing, only its endpoint returns a clear message — the core workflow
+  keeps working.

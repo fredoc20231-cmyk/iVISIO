@@ -1,0 +1,19 @@
+services:
+  backend:
+    build: ./backend
+    container_name: ivisio-backend
+    ports:
+      - "8000:8000"
+    # Analysis is memory-hungry for large Visium libraries; raise as needed.
+    deploy:
+      resources:
+        limits:
+          memory: 8g
+
+  frontend:
+    build: ./frontend
+    container_name: ivisio-frontend
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"
