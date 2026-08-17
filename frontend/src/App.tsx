@@ -13,6 +13,7 @@ import SVGTab from "./components/SVGTab";
 import SpatialStatsTab from "./components/SpatialStatsTab";
 import TrajectoryTab from "./components/TrajectoryTab";
 import ReferenceTab from "./components/ReferenceTab";
+import STIETab from "./components/STIETab";
 import AITab from "./components/AITab";
 import LigRecTab from "./components/LigRecTab";
 import IntegrationTab from "./components/IntegrationTab";
@@ -39,10 +40,11 @@ const TABS: TabDef[] = [
   { id: "spstats", label: "10 · Spatial statistics", render: () => <SpatialStatsTab />, requires: "clusters" },
   { id: "trajectory", label: "11 · Trajectory", render: () => <TrajectoryTab />, requires: "clusters" },
   { id: "reference", label: "12 · Deconvolution", render: () => <ReferenceTab />, requires: "loaded" },
-  { id: "ai", label: "13 · AI & Enrichment", render: () => <AITab />, requires: "clusters" },
-  { id: "ligrec", label: "14 · Cell-Cell Comm.", render: () => <LigRecTab />, requires: "clusters" },
-  { id: "integration", label: "15 · Integration", render: () => <IntegrationTab />, requires: "loaded" },
-  { id: "export", label: "16 · Export", render: () => <ExportTab />, requires: "loaded" },
+  { id: "stie", label: "13 · STIE (single-cell)", render: () => <STIETab />, requires: "loaded" },
+  { id: "ai", label: "14 · AI & Enrichment", render: () => <AITab />, requires: "clusters" },
+  { id: "ligrec", label: "15 · Cell-Cell Comm.", render: () => <LigRecTab />, requires: "clusters" },
+  { id: "integration", label: "16 · Integration", render: () => <IntegrationTab />, requires: "loaded" },
+  { id: "export", label: "17 · Export", render: () => <ExportTab />, requires: "loaded" },
 ];
 
 export default function App() {

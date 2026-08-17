@@ -138,6 +138,7 @@ def status(sid: str) -> dict:
             "enrichment": sess.enrichment is not None,
             "ligrec": sess.ligrec is not None,
             "deconv": sess.reference_deconv is not None,
+            "stie": sess.stie is not None,
         },
         "log": sess.log[-200:],
     }
@@ -171,7 +172,7 @@ async def load(
             img_path = img
         scale = _save_upload(scale_factors, ".json")
         pos = _save_upload(tissue_positions, ".csv")
-        adata, image, sf, overlay = load_visium(h5, img_path, scale, pos, project=project)
+        adata, image, sf, overlay, spots_fr, spot_diam = load_visium(h5, img_path, scale, pos, project=project)
         if metadata is not None:
             md = _save_upload(metadata, ".csv")
             adata = attach_metadata(adata, md)
@@ -179,6 +180,8 @@ async def load(
         sess.image = image
         sess.scale_factor = sf
         sess.positions = overlay
+        sess.spots_fullres = spots_fr
+        sess.spot_diameter_fullres = spot_diam
         sess.project = project
         sess.note(f"Loaded {adata.n_obs} spots and {adata.n_vars} features.")
         return {"n_spots": int(adata.n_obs), "n_features": int(adata.n_vars)}
@@ -649,6 +652,148 @@ def advanced_integrate(adatas, n_pcs, use_harmony):
 
 
 # --------------------------------------------------------------------------- #
+# STIE — single-cell deconvolution / convolution / clustering (Zhu et al. 2024)
+# --------------------------------------------------------------------------- #
+def _prepare_stie_inputs(sess: Session, cells_csv: str, features: str):
+    """Validate the cells-on-image CSV and align its geometry to the spots."""
+    import numpy as np
+
+    a = _require_adata(sess)
+    if sess.spots_fullres is None or sess.spot_diameter_fullres <= 0:
+        raise HTTPException(status_code=400,
+                            detail="STIE needs full-resolution spot geometry. Reload the Visium files "
+                                   "(the scale-factor JSON must include spot_diameter_fullres).")
+    cells = pd.read_csv(cells_csv)
+    required = {"cell_id"}
+    if not required.issubset(cells.columns):
+        raise HTTPException(status_code=400, detail="Cells CSV must contain a 'cell_id' column.")
+    # Accept common coordinate column names for the nuclei centroids.
+    xcol = next((c for c in ["pixel_x", "x", "imagecol", "Centroid_X", "X"] if c in cells.columns), None)
+    ycol = next((c for c in ["pixel_y", "y", "imagerow", "Centroid_Y", "Y"] if c in cells.columns), None)
+    if xcol is None or ycol is None:
+        raise HTTPException(status_code=400, detail="Cells CSV must contain nucleus pixel coordinates "
+                                                    "(pixel_x/pixel_y or x/y).")
+    cells["_x"] = pd.to_numeric(cells[xcol], errors="coerce")
+    cells["_y"] = pd.to_numeric(cells[ycol], errors="coerce")
+    cells = cells[np.isfinite(cells["_x"]) & np.isfinite(cells["_y"])].reset_index(drop=True)
+    feature_cols = [f.strip() for f in (features or "").split(",") if f.strip()]
+    feature_cols = [f for f in feature_cols if f in cells.columns]
+    if not feature_cols:
+        raise HTTPException(status_code=400,
+                            detail="Provide at least one nuclear-morphology feature column present in the CSV "
+                                   "(e.g. area, perimeter, circularity).")
+    spot_index = [b for b in a.obs_names if b in sess.spots_fullres.index]
+    spot_xy = sess.spots_fullres.loc[spot_index, ["x", "y"]].to_numpy(dtype=float)
+    # Log-normalized spot expression drives the signature fit.
+    src = a.raw.to_adata() if a.raw is not None else a
+    expr = pd.DataFrame(
+        src[spot_index].X.toarray() if hasattr(src[spot_index].X, "toarray") else src[spot_index].X,
+        index=spot_index, columns=list(src.var_names),
+    )
+    return cells, feature_cols, spot_index, spot_xy, expr
+
+
+def _stie_summary(sess: Session, result) -> dict:
+    """Build the JSON response + attach image-space coords for overlay plotting."""
+    a = sess.adata
+    h = a.uns["ivisio"]["image_shape"][0]
+    sf = sess.scale_factor
+    cells = result.cells.copy()
+    cells["img_x"] = cells["x"] * sf
+    cells["img_y"] = h - cells["y"] * sf
+    sess.stie = result
+    sess._stie_cells_img = cells  # cached for the overlay endpoint
+    comp = cells["cell_type"].value_counts()
+    return {
+        "mode": result.mode,
+        "cell_types": result.cell_types,
+        "n_cells": int(cells.shape[0]),
+        "n_recovered": int(result.n_recovered),
+        "rmse_trace": result.rmse_trace,
+        "gamma": result.gamma, "lam": result.lam,
+        "composition": {str(k): int(v) for k, v in comp.items()},
+    }
+
+
+@app.post("/api/{sid}/stie/deconvolve")
+async def stie_deconvolve(
+    sid: str,
+    cells_csv: UploadFile = File(...),
+    signature_csv: UploadFile = File(...),
+    features: str = Form("area,perimeter,circularity"),
+    gamma: float = Form(2.5),
+    lam: float = Form(0.0),
+    steps: int = Form(20),
+) -> dict:
+    from . import stie as stie_mod
+
+    sess = _session(sid)
+
+    def _do():
+        cpath = _save_upload(cells_csv, ".csv")
+        spath = _save_upload(signature_csv, ".csv")
+        cells, feats, spot_index, spot_xy, expr = _prepare_stie_inputs(sess, cpath, features)
+        signature = pd.read_csv(spath, index_col=0).apply(pd.to_numeric, errors="coerce").dropna(how="all")
+        result = stie_mod.deconvolve(expr, signature, cells, spot_index, spot_xy, feats,
+                                     sess.spot_diameter_fullres, gamma=gamma, lam=lam, steps=steps)
+        sess.note(f"STIE deconvolution: {result.cells.shape[0]} cells "
+                  f"({result.n_recovered} recovered from gap area), {len(result.cell_types)} types.")
+        return _stie_summary(sess, result)
+
+    return await run_in_threadpool(_guard, _do, sess, "STIE")
+
+
+@app.post("/api/{sid}/stie/cluster")
+async def stie_cluster(
+    sid: str,
+    cells_csv: UploadFile = File(...),
+    k: int = Form(5),
+    features: str = Form("area,perimeter,circularity"),
+    gamma: float = Form(2.5),
+    lam: float = Form(0.0),
+    steps: int = Form(20),
+) -> dict:
+    from . import stie as stie_mod
+
+    sess = _session(sid)
+
+    def _do():
+        cpath = _save_upload(cells_csv, ".csv")
+        cells, feats, spot_index, spot_xy, expr = _prepare_stie_inputs(sess, cpath, features)
+        result = stie_mod.cluster(expr, cells, spot_index, spot_xy, feats, k,
+                                  sess.spot_diameter_fullres, gamma=gamma, lam=lam, steps=steps)
+        sess.note(f"STIE clustering (k={k}): {result.cells.shape[0]} cells, "
+                  f"{result.n_recovered} recovered from gap area.")
+        return _stie_summary(sess, result)
+
+    return await run_in_threadpool(_guard, _do, sess, "STIE")
+
+
+@app.get("/api/{sid}/stie/cells")
+def stie_cells(sid: str) -> dict:
+    sess = _session(sid)
+    cells = getattr(sess, "_stie_cells_img", None)
+    if cells is None:
+        raise HTTPException(status_code=400, detail="Run STIE first.")
+    a = sess.adata
+    return {
+        "x": cells["img_x"].tolist(), "y": cells["img_y"].tolist(),
+        "labels": cells["cell_type"].tolist(),
+        "recovered": cells["recovered"].tolist(),
+        "cell_ids": cells["cell_id"].astype(str).tolist(),
+        "image_shape": a.uns["ivisio"]["image_shape"],
+    }
+
+
+@app.get("/api/{sid}/stie/morphology")
+def stie_morphology(sid: str) -> dict:
+    sess = _session(sid)
+    if sess.stie is None:
+        raise HTTPException(status_code=400, detail="Run STIE first.")
+    return _df_response(sess.stie.morphology, 500)
+
+
+# --------------------------------------------------------------------------- #
 # 13. Exports / downloads
 # --------------------------------------------------------------------------- #
 def _csv_stream(df: pd.DataFrame, filename: str) -> StreamingResponse:
@@ -667,6 +812,10 @@ def download(sid: str, artifact: str, prefix: str = "visium_analysis"):
         "ai": sess.ai_annotations, "enrichment": sess.enrichment,
         "ligrec": sess.ligrec, "deconv": sess.reference_deconv,
         "signature": sess.reference_signature,
+        "stie_cells": sess.stie.cells if sess.stie else None,
+        "stie_morphology": sess.stie.morphology if sess.stie else None,
+        "stie_signature": sess.stie.signature if (sess.stie and sess.stie.signature is not None) else None,
+        "stie_spot_proportions": sess.stie.spot_prop if sess.stie else None,
     }
     if artifact in tables:
         df = tables[artifact]

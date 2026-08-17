@@ -50,10 +50,39 @@ palette is validated for colorblind-safety in both light and dark surfaces.
 | 10 | Spatial statistics | **Neighborhood enrichment**, **co-occurrence**, cluster correlation |
 | 11 | Trajectory | **PAGA graph** + **diffusion pseudotime** |
 | 12 | Deconvolution | NNLS reference deconvolution + composition |
-| 13 | AI & Enrichment | Local Jaccard cell-type annotation + gseapy enrichment |
-| 14 | Cell-Cell Comm. | squidpy `ligrec` (CellChat analog) |
-| 15 | Integration | Multi-slice ZIP upload + harmonypy batch correction (Harmony analog) |
-| 16 | Export | Download every table (CSV), the AnnData (.h5ad), and an HTML report |
+| 13 | **STIE (single-cell)** | **Native EM implementation of Zhu et al. 2024** — single-cell deconvolution / convolution / clustering integrating spot expression with nuclear morphology, with gap-area cell recovery |
+| 14 | AI & Enrichment | Local Jaccard cell-type annotation + gseapy enrichment |
+| 15 | Cell-Cell Comm. | squidpy `ligrec` (CellChat analog) |
+| 16 | Integration | Multi-slice ZIP upload + harmonypy batch correction (Harmony analog) |
+| 17 | Export | Download every table (CSV), the AnnData (.h5ad), and an HTML report |
+
+### STIE — single-cell level (Nature Communications 2024)
+
+Tab 13 is a faithful native-Python implementation of the **STIE** Expectation-
+Maximization algorithm from Zhu, Kubota, Wang, Wang, Xiao & Hoshida,
+*"STIE: Single-cell level deconvolution, convolution, and clustering in in situ
+capturing-based spatial transcriptomics,"* Nat Commun **15**, 7559 (2024). It
+jointly models spot-level gene expression and matched histology-image nuclear
+morphology to reach the single-cell *level* (not just resolution):
+
+- **Deconvolution / convolution** given a gene × cell-type signature, and
+  **signature-free clustering** when none is supplied (with per-iteration
+  signature re-estimation, yielding CAGE).
+- **Bona-fide spot area** hyperparameter **γ** (default 2.5× the reported spot
+  diameter) and morphology shrinkage penalty **λ** (Eq. 6–8).
+- Per-spot penalized NNLS for the cell-type coefficients β, soft-EM refresh of
+  the Gaussian morphology parameters μ_k / σ_k, and combined
+  morphology + expression cell-type assignment (Eq. 9).
+- **Gap-area recovery** of cells missed by all spots via nearest-spot
+  neighborhood information.
+
+Input is a nucleus-segmentation table (`cell_id`, pixel coordinates, and
+morphology columns such as area / perimeter / circularity) — produced by any
+segmentation tool (e.g. the paper's DeepImageJ Multi-Organ model, StarDist, or
+Cellpose). The tab visualizes single cells on the tissue image, EM convergence,
+composition, and the learned per-type nuclear-morphology profiles; all outputs
+(per-cell assignments, spot proportions, morphology profiles, CAGE) are
+downloadable.
 
 ### Advanced analytical concepts included
 

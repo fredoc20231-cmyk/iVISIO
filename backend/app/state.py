@@ -36,6 +36,8 @@ class Session:
     image: np.ndarray | None = None          # H x W x C uint8 tissue image
     scale_factor: float = 1.0                # hires/lowres scalefactor applied to pixel coords
     positions: pd.DataFrame | None = None    # barcode -> pixel coords (already scaled)
+    spots_fullres: pd.DataFrame | None = None  # barcode -> full-res pixel coords (for STIE)
+    spot_diameter_fullres: float = 0.0       # spot diameter in full-res pixels (for STIE)
 
     # Result tables (pandas DataFrames) and objects
     markers: pd.DataFrame | None = None
@@ -47,6 +49,7 @@ class Session:
     enrichment: pd.DataFrame | None = None
     ligrec: pd.DataFrame | None = None
     signatures: dict[str, dict] = field(default_factory=dict)
+    stie: object | None = None               # stie.STIEResult
 
     def note(self, text: str) -> None:
         stamp = time.strftime("%Y-%m-%d %H:%M:%S")

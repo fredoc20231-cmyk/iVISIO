@@ -93,6 +93,12 @@ export const api = {
   pseudotime: async (sid: string, body: object) => (await http.post(`/${sid}/trajectory/pseudotime`, body)).data,
   integrate: async (sid: string, form: FormData) => (await http.post(`/${sid}/integrate`, form)).data,
 
+  // --- STIE single-cell deconvolution / clustering ---
+  stieDeconvolve: async (sid: string, form: FormData) => (await http.post(`/${sid}/stie/deconvolve`, form)).data,
+  stieCluster: async (sid: string, form: FormData) => (await http.post(`/${sid}/stie/cluster`, form)).data,
+  stieCells: async (sid: string) => (await http.get(`/${sid}/stie/cells`)).data,
+  stieMorphology: async (sid: string) => (await http.get(`/${sid}/stie/morphology`)).data,
+
   imageUrl: (sid: string) => `/api/${sid}/image`,
   downloadUrl: (sid: string, artifact: string, prefix: string) =>
     `/api/${sid}/download/${artifact}?prefix=${encodeURIComponent(prefix)}`,

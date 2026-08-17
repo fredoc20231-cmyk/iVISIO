@@ -73,6 +73,8 @@ def load_visium(
         scale_factor = float(scale.get("tissue_lowres_scalef", 1.0))
     else:
         scale_factor = float(scale.get("tissue_hires_scalef") or scale.get("tissue_lowres_scalef") or 1.0)
+    # Spot diameter in full-resolution pixels drives STIE's bona-fide spot area.
+    spot_diameter_fullres = float(scale.get("spot_diameter_fullres", 0.0))
 
     img = np.asarray(Image.open(image_path).convert("RGB"))
     height, width = img.shape[0], img.shape[1]
@@ -115,14 +117,23 @@ def load_visium(
         "y": height - y,          # flip for plotting over the raster image
     }).set_index("barcode")
 
+    # Full-resolution spot centres (unscaled), used by STIE for spot↔cell
+    # geometry against the histology image's native pixel coordinates.
+    spots_fullres = pd.DataFrame({
+        "barcode": keep,
+        "x": pos["pxl_col"].to_numpy(),
+        "y": pos["pxl_row"].to_numpy(),
+    }).set_index("barcode")
+
     adata.uns["ivisio"] = {
         "project": project,
         "image_shape": [int(height), int(width)],
         "scale_factor": scale_factor,
+        "spot_diameter_fullres": spot_diameter_fullres,
     }
     adata.obs["barcode"] = adata.obs_names
 
-    return adata, img, scale_factor, overlay
+    return adata, img, scale_factor, overlay, spots_fullres, spot_diameter_fullres
 
 
 def attach_metadata(adata: ad.AnnData, metadata_path: str) -> ad.AnnData:

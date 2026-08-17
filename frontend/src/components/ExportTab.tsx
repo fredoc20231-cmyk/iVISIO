@@ -14,6 +14,9 @@ const ARTIFACTS: { key: string; label: string; needs?: string }[] = [
   { key: "ai", label: "AI annotations (CSV)", needs: "ai" },
   { key: "enrichment", label: "Pathway enrichment (CSV)", needs: "enrichment" },
   { key: "ligrec", label: "Ligand-receptor pairs (CSV)", needs: "ligrec" },
+  { key: "stie_cells", label: "STIE single cells (CSV)", needs: "stie" },
+  { key: "stie_morphology", label: "STIE morphology profiles (CSV)", needs: "stie" },
+  { key: "stie_spot_proportions", label: "STIE spot proportions (CSV)", needs: "stie" },
   { key: "report", label: "HTML report" },
 ];
 

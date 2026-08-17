@@ -20,6 +20,28 @@ as a REST API for the React frontend.
 | Pathway enrichment | clusterProfiler | `gseapy.enrichr` |
 | Cell-cell communication | CellChat | `squidpy.gr.ligrec` |
 | Multi-slice integration | Harmony | `harmonypy` via `sc.external.pp.harmony_integrate` |
+| **STIE single-cell EM** | STIE R package | **native NumPy/SciPy EM** (`stie.py`) — no R dependency |
+
+### STIE (`app/stie.py`)
+
+A faithful re-implementation of the STIE EM algorithm (Zhu et al., *Nat Commun*
+2024, doi:10.1038/s41467-024-51728-5). It jointly models spot expression (Λ, X, β)
+and Gaussian nuclear morphology (μ_k, σ_k), using the bona-fide spot area γ and
+morphology shrinkage penalty λ. The M-step gene-expression update (Eq. 6–8) is a
+per-spot penalized NNLS surrogate of the paper's quadprog formulation; morphology
+parameters are refreshed from soft responsibilities (Eq. 4); cells are typed by
+the combined morphology + expression score (Eq. 9); the signature is re-estimated
+by NNLS in clustering mode (Eq. 10); and gap-area cells are recovered via their
+nearest spot. Endpoints: `POST /stie/deconvolve`, `POST /stie/cluster`,
+`GET /stie/cells`, `GET /stie/morphology`; downloads: `stie_cells`,
+`stie_morphology`, `stie_signature` (CAGE), `stie_spot_proportions`.
+
+> Faithfulness note: the geometry uses `spot_diameter_fullres` from the
+> scale-factor JSON and the full-resolution tissue-position pixel coordinates, so
+> the cells-on-image CSV must be in the same full-resolution pixel space as the
+> histology image. The penalized-NNLS M-step is a convex surrogate of the exact
+> quadprog objective; results are directionally equivalent but not bit-identical
+> to the reference R package.
 
 Optional packages (`squidpy`, `gseapy`, `harmonypy`) are imported lazily; if a
 package is missing, the relevant endpoint returns a clear 400 rather than
