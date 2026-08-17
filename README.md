@@ -31,20 +31,39 @@ with every result table and object available for download.
 
 ## Workflow (frontend tabs)
 
-| # | Tab | Backend capability |
+The UI opens on an **Overview dashboard** (KPI tiles, cluster sizes, PCA scree,
+AI-predicted composition) and includes a selectable **dark mode** whose chart
+palette is validated for colorblind-safety in both light and dark surfaces.
+
+| # | Tab | Backend capability / visualization |
 |---|-----|--------------------|
+| — | Overview | KPI tiles + cluster-size bar + PCA scree + composition donut |
 | 1 | Load | Assemble AnnData from the 4 Space Ranger files + optional metadata |
-| 2 | QC | Counts / genes / mito %, distributions, and filtering |
-| 3 | Normalize | LogNormalize or Pearson residuals (SCT analog) + PCA |
-| 4 | Clusters | Leiden clustering + UMAP |
+| 2 | QC | Counts / genes / mito %, distributions, scatter, and filtering |
+| 3 | Normalize | LogNormalize or Pearson residuals (SCT analog) + PCA elbow |
+| 4 | Clusters | Leiden clustering + interactive UMAP |
 | 5 | Spatial map | Expression / label overlay on the tissue image |
 | 6 | Explore | Feature-on-UMAP + custom signature scoring |
-| 7 | Markers / DE | `rank_genes_groups` markers and pairwise DE |
-| 8 | Spatially variable | Moran's I via squidpy |
-| 9 | Deconvolution | NNLS reference deconvolution |
-| 10 | AI & Enrichment | Local Jaccard cell-type annotation + gseapy enrichment |
-| 11 | Cell-Cell Comm. | squidpy `ligrec` (CellChat analog) |
-| 12 | Export | Download every table (CSV), the AnnData (.h5ad), and an HTML report |
+| 7 | Markers / DE | `rank_genes_groups` markers, pairwise DE, **volcano plot** |
+| 8 | Expression matrix | **Dot plot**, **marker heatmap**, **stacked violin** |
+| 9 | Spatially variable | Moran's I via squidpy |
+| 10 | Spatial statistics | **Neighborhood enrichment**, **co-occurrence**, cluster correlation |
+| 11 | Trajectory | **PAGA graph** + **diffusion pseudotime** |
+| 12 | Deconvolution | NNLS reference deconvolution + composition |
+| 13 | AI & Enrichment | Local Jaccard cell-type annotation + gseapy enrichment |
+| 14 | Cell-Cell Comm. | squidpy `ligrec` (CellChat analog) |
+| 15 | Integration | Multi-slice ZIP upload + harmonypy batch correction (Harmony analog) |
+| 16 | Export | Download every table (CSV), the AnnData (.h5ad), and an HTML report |
+
+### Advanced analytical concepts included
+
+Dot plots · marker heatmaps · stacked violins · volcano plots · Moran's I
+spatially-variable genes · **neighborhood enrichment** · **co-occurrence vs
+distance** · **PAGA connectivity** · **diffusion pseudotime** · cluster
+correlation dendrograms · ligand-receptor communication · NNLS deconvolution ·
+local AI cell-type annotation · gseapy pathway enrichment · Harmony multi-slice
+integration. Every visualization uses a colorblind-safe palette validated in
+light and dark modes, always paired with a legend and a downloadable table.
 
 ## Quick start (Docker)
 

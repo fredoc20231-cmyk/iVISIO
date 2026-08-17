@@ -81,6 +81,18 @@ export const api = {
   ligrec: async (sid: string, body: object): Promise<TableResponse> =>
     (await http.post(`/${sid}/ligrec`, body)).data,
 
+  // --- Advanced analytics / visualizations ---
+  dashboard: async (sid: string) => (await http.get(`/${sid}/dashboard`)).data,
+  dotplot: async (sid: string, body: object) => (await http.post(`/${sid}/viz/dotplot`, body)).data,
+  heatmap: async (sid: string, body: object) => (await http.post(`/${sid}/viz/heatmap`, body)).data,
+  violin: async (sid: string, body: object) => (await http.post(`/${sid}/viz/violin`, body)).data,
+  dendrogram: async (sid: string, body: object) => (await http.post(`/${sid}/viz/dendrogram`, body)).data,
+  nhood: async (sid: string, body: object) => (await http.post(`/${sid}/spatial-stats/nhood`, body)).data,
+  cooccurrence: async (sid: string, body: object) => (await http.post(`/${sid}/spatial-stats/cooccurrence`, body)).data,
+  paga: async (sid: string, body: object) => (await http.post(`/${sid}/trajectory/paga`, body)).data,
+  pseudotime: async (sid: string, body: object) => (await http.post(`/${sid}/trajectory/pseudotime`, body)).data,
+  integrate: async (sid: string, form: FormData) => (await http.post(`/${sid}/integrate`, form)).data,
+
   imageUrl: (sid: string) => `/api/${sid}/image`,
   downloadUrl: (sid: string, artifact: string, prefix: string) =>
     `/api/${sid}/download/${artifact}?prefix=${encodeURIComponent(prefix)}`,

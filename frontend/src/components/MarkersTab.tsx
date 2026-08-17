@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { useStore } from "../store";
+import Plot from "./Plot";
+import { baseLayout, plotConfig } from "../theme";
 import { Button, Card, DataTable, Field } from "./ui";
 import type { TableResponse } from "../types";
 
 export default function MarkersTab() {
-  const { sid, status, run, busy } = useStore();
+  const { sid, status, run, busy, dark } = useStore();
   const [groupCol, setGroupCol] = useState("clusters");
   const [minPct, setMinPct] = useState(0.1);
   const [logfc, setLogfc] = useState(0.25);
@@ -66,6 +68,7 @@ export default function MarkersTab() {
         </Card>
       </div>
       <div className="content">
+        {table && <Card title="Volcano plot"><Volcano table={table} dark={dark} /></Card>}
         <Card
           title="Differential results"
           actions={sid && table ? <a className="pill" href={api.downloadUrl(sid, "markers", status?.project ?? "visium")}>Download CSV</a> : undefined}
@@ -74,5 +77,49 @@ export default function MarkersTab() {
         </Card>
       </div>
     </div>
+  );
+}
+
+function Volcano({ table, dark }: { table: TableResponse; dark: boolean }) {
+  const rows = table.rows;
+  const lfc = rows.map((r) => Number(r["avg_log2FC"] ?? 0));
+  const padj = rows.map((r) => Number(r["p_val_adj"] ?? 1));
+  const y = padj.map((p) => -Math.log10(Math.max(p, 1e-300)));
+  const names = rows.map((r) => String(r["feature"] ?? r["gene"] ?? ""));
+  // Significance/direction categories drive color AND are labeled in the legend,
+  // so identity never rests on hue alone.
+  const cat = lfc.map((f, i) =>
+    padj[i] < 0.05 && Math.abs(f) >= 1 ? (f > 0 ? "Up" : "Down") : "n.s."
+  );
+  const groups: { name: string; color: string }[] = [
+    { name: "Up", color: "#e34948" },
+    { name: "Down", color: "#2a78d6" },
+    { name: "n.s.", color: dark ? "#6b7686" : "#b8beca" },
+  ];
+  const traces = groups.map((g) => {
+    const idx = cat.map((c, i) => (c === g.name ? i : -1)).filter((i) => i >= 0);
+    return {
+      x: idx.map((i) => lfc[i]), y: idx.map((i) => y[i]),
+      text: idx.map((i) => names[i]), mode: "markers", type: "scattergl", name: g.name,
+      marker: { size: 6, color: g.color, opacity: 0.8 },
+      hovertemplate: "%{text}<br>log2FC=%{x:.2f}<br>-log10 p.adj=%{y:.1f}<extra></extra>",
+    };
+  });
+  return (
+    <Plot
+      data={traces}
+      layout={baseLayout({
+        height: 460,
+        xaxis: { title: "log2 fold change" },
+        yaxis: { title: "-log10 adjusted p-value" },
+        shapes: [
+          { type: "line", x0: 1, x1: 1, yref: "paper", y0: 0, y1: 1, line: { dash: "dot", width: 1, color: "#98a2b3" } },
+          { type: "line", x0: -1, x1: -1, yref: "paper", y0: 0, y1: 1, line: { dash: "dot", width: 1, color: "#98a2b3" } },
+        ],
+      })}
+      config={plotConfig}
+      style={{ width: "100%" }}
+      key={dark ? "vd" : "vl"}
+    />
   );
 }

@@ -71,3 +71,29 @@ class EnrichmentParams(BaseModel):
 class LigRecParams(BaseModel):
     group_col: str = "clusters"
     n_perms: int = 100
+
+
+# --- Advanced visualization / analytics ------------------------------------ #
+class GeneGroupParams(BaseModel):
+    genes: list[str]
+    group_col: str = "clusters"
+
+
+class HeatmapParams(BaseModel):
+    group_col: str = "clusters"
+    top_n: int = 5
+
+
+class GroupOnlyParams(BaseModel):
+    group_col: str = "clusters"
+    n_neighbors: int = 6
+
+
+class PseudotimeParams(BaseModel):
+    group_col: str = "clusters"
+    root_group: str
+
+
+class IntegrateParams(BaseModel):
+    use_harmony: bool = True
+    n_pcs: int = 20

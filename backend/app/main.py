@@ -30,13 +30,14 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 from PIL import Image
 from scipy.sparse import issparse
 
-from . import pipeline
+from . import advanced, pipeline
 from .io_visium import attach_metadata, load_visium
 from .knowledge import AI_CELL_TYPE_DICT, REFERENCE_CATALOG
 from .schemas import (
     AIParams, ClusterParams, DEParams, EnrichmentParams, FilterParams,
-    LigRecParams, MarkerParams, NormalizeParams, QCParams, SVGParams,
-    SignatureParams,
+    GeneGroupParams, GroupOnlyParams, HeatmapParams, IntegrateParams,
+    LigRecParams, MarkerParams, NormalizeParams, PseudotimeParams, QCParams,
+    SVGParams, SignatureParams,
 )
 from .state import Session, store
 
@@ -506,6 +507,145 @@ async def ligrec(sid: str, params: LigRecParams) -> dict:
         return _df_response(df)
 
     return await run_in_threadpool(_guard, _do, sess, "LIGREC")
+
+
+# --------------------------------------------------------------------------- #
+# Dashboard overview
+# --------------------------------------------------------------------------- #
+@app.get("/api/{sid}/dashboard")
+def dashboard(sid: str) -> dict:
+    sess = _session(sid)
+    a = _require_adata(sess)
+    out: dict = {
+        "n_spots": int(a.n_obs), "n_features": int(a.n_vars),
+        "median_counts": float(np.median(a.obs["n_counts"])) if "n_counts" in a.obs else None,
+        "median_genes": float(np.median(a.obs["n_genes"])) if "n_genes" in a.obs else None,
+        "median_percent_mt": float(np.median(a.obs["percent_mt"])) if "percent_mt" in a.obs else None,
+    }
+    if "clusters" in a.obs:
+        counts = a.obs["clusters"].value_counts()
+        out["n_clusters"] = int(counts.shape[0])
+        out["cluster_sizes"] = {str(k): int(v) for k, v in counts.sort_index().items()}
+    if "pca" in a.uns and "variance_ratio" in a.uns["pca"]:
+        out["variance_ratio"] = a.uns["pca"]["variance_ratio"][:30].tolist()
+    if sess.ai_annotations is not None:
+        out["ai_annotations"] = sess.ai_annotations.to_dict(orient="records")
+    return out
+
+
+# --------------------------------------------------------------------------- #
+# Advanced visualization / analytics
+# --------------------------------------------------------------------------- #
+@app.post("/api/{sid}/viz/dotplot")
+def viz_dotplot(sid: str, params: GeneGroupParams) -> dict:
+    sess = _session(sid)
+    a = _require_adata(sess)
+    return _guard(lambda: advanced.dot_plot(a, params.genes, params.group_col), sess, "DOTPLOT")
+
+
+@app.post("/api/{sid}/viz/heatmap")
+def viz_heatmap(sid: str, params: HeatmapParams) -> dict:
+    sess = _session(sid)
+    a = _require_adata(sess)
+    return _guard(lambda: advanced.marker_heatmap(a, sess.markers, params.group_col, params.top_n),
+                  sess, "HEATMAP")
+
+
+@app.post("/api/{sid}/viz/violin")
+def viz_violin(sid: str, params: GeneGroupParams) -> dict:
+    sess = _session(sid)
+    a = _require_adata(sess)
+    return _guard(lambda: advanced.violin(a, params.genes, params.group_col), sess, "VIOLIN")
+
+
+@app.post("/api/{sid}/viz/dendrogram")
+def viz_dendrogram(sid: str, params: HeatmapParams) -> dict:
+    sess = _session(sid)
+    a = _require_adata(sess)
+    return _guard(lambda: advanced.cluster_correlation(a, params.group_col), sess, "DENDROGRAM")
+
+
+@app.post("/api/{sid}/spatial-stats/nhood")
+async def spatial_nhood(sid: str, params: GroupOnlyParams) -> dict:
+    sess = _session(sid)
+    a = _require_adata(sess)
+    return await run_in_threadpool(
+        _guard, lambda: advanced.neighborhood_enrichment(a, params.group_col, params.n_neighbors),
+        sess, "NHOOD")
+
+
+@app.post("/api/{sid}/spatial-stats/cooccurrence")
+async def spatial_cooccurrence(sid: str, params: GroupOnlyParams) -> dict:
+    sess = _session(sid)
+    a = _require_adata(sess)
+    return await run_in_threadpool(
+        _guard, lambda: advanced.co_occurrence(a, params.group_col), sess, "COOCCUR")
+
+
+@app.post("/api/{sid}/trajectory/paga")
+async def trajectory_paga(sid: str, params: HeatmapParams) -> dict:
+    sess = _session(sid)
+    a = _require_adata(sess)
+    return await run_in_threadpool(
+        _guard, lambda: advanced.paga_trajectory(a, params.group_col), sess, "PAGA")
+
+
+@app.post("/api/{sid}/trajectory/pseudotime")
+async def trajectory_pseudotime(sid: str, params: PseudotimeParams) -> dict:
+    sess = _session(sid)
+    a = _require_adata(sess)
+    return await run_in_threadpool(
+        _guard, lambda: advanced.diffusion_pseudotime(a, params.root_group, params.group_col),
+        sess, "PSEUDOTIME")
+
+
+# --------------------------------------------------------------------------- #
+# Multi-slice integration (Harmony analog)
+# --------------------------------------------------------------------------- #
+@app.post("/api/{sid}/integrate")
+async def integrate(
+    sid: str,
+    slices_zip: UploadFile = File(...),
+    use_harmony: bool = Form(True),
+    n_pcs: int = Form(20),
+) -> dict:
+    import os
+    import zipfile
+
+    sess = _session(sid)
+
+    def _do():
+        zpath = _save_upload(slices_zip, ".zip")
+        extract = tempfile.mkdtemp(prefix="ivisio_multislice_")
+        with zipfile.ZipFile(zpath) as zf:
+            zf.extractall(extract)
+        # A Space Ranger folder is any dir containing a filtered .h5 matrix.
+        roots = []
+        for base, _dirs, files in os.walk(extract):
+            if any(f.endswith("filtered_feature_bc_matrix.h5") for f in files):
+                roots.append(base)
+        if len(roots) < 2:
+            raise ValueError("Fewer than two Space Ranger folders with a filtered .h5 matrix were found in the ZIP.")
+        adatas = []
+        for r in sorted(roots):
+            h5 = next(f for f in os.listdir(r) if f.endswith("filtered_feature_bc_matrix.h5"))
+            ad = sc.read_10x_h5(os.path.join(r, h5))
+            ad.var_names_make_unique()
+            adatas.append(ad)
+        merged = advanced_integrate(adatas, n_pcs, use_harmony)
+        sess.adata = merged
+        sess.image = None
+        sess.positions = None
+        sess.project = "Integrated_MultiSlice"
+        mode = merged.uns.get("ivisio_integration", "merge")
+        sess.note(f"Integrated {len(roots)} slices ({merged.n_obs} spots, {mode}).")
+        return {"n_spots": int(merged.n_obs), "n_slices": len(roots), "integration": mode}
+
+    return await run_in_threadpool(_guard, _do, sess, "INTEGRATE")
+
+
+def advanced_integrate(adatas, n_pcs, use_harmony):
+    return pipeline.integrate_slices(adatas, n_pcs=n_pcs, use_harmony=use_harmony)
 
 
 # --------------------------------------------------------------------------- #

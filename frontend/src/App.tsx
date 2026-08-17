@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useStore } from "./store";
+import Dashboard from "./components/Dashboard";
 import LoadTab from "./components/LoadTab";
 import QCTab from "./components/QCTab";
 import NormalizeTab from "./components/NormalizeTab";
@@ -7,10 +8,14 @@ import ClusterTab from "./components/ClusterTab";
 import SpatialTab from "./components/SpatialTab";
 import ExploreTab from "./components/ExploreTab";
 import MarkersTab from "./components/MarkersTab";
+import MatrixTab from "./components/MatrixTab";
 import SVGTab from "./components/SVGTab";
+import SpatialStatsTab from "./components/SpatialStatsTab";
+import TrajectoryTab from "./components/TrajectoryTab";
 import ReferenceTab from "./components/ReferenceTab";
 import AITab from "./components/AITab";
 import LigRecTab from "./components/LigRecTab";
+import IntegrationTab from "./components/IntegrationTab";
 import ExportTab from "./components/ExportTab";
 
 interface TabDef {
@@ -21,6 +26,7 @@ interface TabDef {
 }
 
 const TABS: TabDef[] = [
+  { id: "dashboard", label: "Overview", render: () => <Dashboard />, requires: "loaded" },
   { id: "load", label: "1 · Load", render: () => <LoadTab /> },
   { id: "qc", label: "2 · QC", render: () => <QCTab />, requires: "loaded" },
   { id: "normalize", label: "3 · Normalize", render: () => <NormalizeTab />, requires: "loaded" },
@@ -28,15 +34,19 @@ const TABS: TabDef[] = [
   { id: "spatial", label: "5 · Spatial map", render: () => <SpatialTab />, requires: "loaded" },
   { id: "explore", label: "6 · Explore", render: () => <ExploreTab />, requires: "loaded" },
   { id: "markers", label: "7 · Markers / DE", render: () => <MarkersTab />, requires: "clusters" },
-  { id: "svg", label: "8 · Spatially variable", render: () => <SVGTab />, requires: "loaded" },
-  { id: "reference", label: "9 · Deconvolution", render: () => <ReferenceTab />, requires: "loaded" },
-  { id: "ai", label: "10 · AI & Enrichment", render: () => <AITab />, requires: "clusters" },
-  { id: "ligrec", label: "11 · Cell-Cell Comm.", render: () => <LigRecTab />, requires: "clusters" },
-  { id: "export", label: "12 · Export", render: () => <ExportTab />, requires: "loaded" },
+  { id: "matrix", label: "8 · Expression matrix", render: () => <MatrixTab />, requires: "clusters" },
+  { id: "svg", label: "9 · Spatially variable", render: () => <SVGTab />, requires: "loaded" },
+  { id: "spstats", label: "10 · Spatial statistics", render: () => <SpatialStatsTab />, requires: "clusters" },
+  { id: "trajectory", label: "11 · Trajectory", render: () => <TrajectoryTab />, requires: "clusters" },
+  { id: "reference", label: "12 · Deconvolution", render: () => <ReferenceTab />, requires: "loaded" },
+  { id: "ai", label: "13 · AI & Enrichment", render: () => <AITab />, requires: "clusters" },
+  { id: "ligrec", label: "14 · Cell-Cell Comm.", render: () => <LigRecTab />, requires: "clusters" },
+  { id: "integration", label: "15 · Integration", render: () => <IntegrationTab />, requires: "loaded" },
+  { id: "export", label: "16 · Export", render: () => <ExportTab />, requires: "loaded" },
 ];
 
 export default function App() {
-  const { status, busy, toast } = useStore();
+  const { status, busy, toast, dark, toggleDark } = useStore();
   const [active, setActive] = useState("load");
 
   const isEnabled = (t: TabDef): boolean => {
@@ -48,19 +58,24 @@ export default function App() {
     return true;
   };
 
-  const current = TABS.find((t) => t.id === active) ?? TABS[0];
+  const current = TABS.find((t) => t.id === active) ?? TABS[1];
 
   return (
     <div className="app">
       <div className="topbar">
         <div>
           <h1>iVisio · Spatial Omics Platform</h1>
-          <div className="sub">FastAPI + scanpy backend · React + TypeScript frontend</div>
+          <div className="sub">FastAPI + scanpy/squidpy · React + TypeScript · advanced spatial analytics</div>
         </div>
-        <div className="sub">
-          {status?.loaded
-            ? `${status.n_spots.toLocaleString()} spots · ${status.n_features.toLocaleString()} features`
-            : "No dataset loaded"}
+        <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+          <span className="sub">
+            {status?.loaded
+              ? `${status.n_spots.toLocaleString()} spots · ${status.n_features.toLocaleString()} features`
+              : "No dataset loaded"}
+          </span>
+          <button className="theme-toggle" onClick={toggleDark} title="Toggle dark mode">
+            {dark ? "☀ Light" : "☾ Dark"}
+          </button>
         </div>
       </div>
 

@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { api, apiError } from "./api";
+import { setDarkMode } from "./theme";
 import type { StatusResponse } from "./types";
 
 interface Store {
@@ -7,6 +8,8 @@ interface Store {
   status: StatusResponse | null;
   busy: boolean;
   toast: string | null;
+  dark: boolean;
+  toggleDark: () => void;
   refresh: () => Promise<void>;
   setBusy: (b: boolean) => void;
   notify: (msg: string) => void;
@@ -20,10 +23,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<StatusResponse | null>(null);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [dark, setDark] = useState<boolean>(
+    () => window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false
+  );
 
   useEffect(() => {
     api.createSession().then(setSid).catch((e) => setToast(apiError(e)));
   }, []);
+
+  // Keep the theme module + document attribute in sync so Plotly charts and
+  // CSS both respond to the toggle. Dark mode is explicitly selected, not an
+  // automatic invert.
+  useEffect(() => {
+    setDarkMode(dark);
+    document.body.dataset.theme = dark ? "dark" : "light";
+  }, [dark]);
+
+  const toggleDark = () => setDark((d) => !d);
 
   const refresh = async () => {
     if (!sid) return;
@@ -63,7 +79,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <Ctx.Provider value={{ sid, status, busy, toast, refresh, setBusy, notify, run }}>
+    <Ctx.Provider value={{ sid, status, busy, toast, dark, toggleDark, refresh, setBusy, notify, run }}>
       {children}
     </Ctx.Provider>
   );
