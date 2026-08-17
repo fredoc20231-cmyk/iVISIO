@@ -189,6 +189,37 @@ async def load(
     return _guard(_do, sess, "LOAD")
 
 
+@app.post("/api/{sid}/load-demo")
+def load_demo(sid: str, seed: int = 0) -> dict:
+    """Populate the session with a self-consistent synthetic Visium dataset.
+
+    Lets users (and reviewers) try the entire platform — including STIE — with
+    no uploads. The generated cells + signature CSVs are downloadable so the
+    STIE tab can be run against them.
+    """
+    from . import demo as demo_mod
+
+    sess = _session(sid)
+
+    def _do():
+        d = demo_mod.generate(seed=seed)
+        sess.adata = d["adata"]
+        sess.image = d["image"]
+        sess.scale_factor = d["scale_factor"]
+        sess.positions = d["overlay"]
+        sess.spots_fullres = d["spots_fullres"]
+        sess.spot_diameter_fullres = d["spot_diameter_fullres"]
+        sess.project = "Demo_Visium"
+        sess._demo_cells = d["cells"]
+        sess._demo_signature = d["signature"]
+        sess.note(f"Loaded synthetic demo dataset: {d['adata'].n_obs} spots, "
+                  f"{d['adata'].n_vars} genes, {d['cells'].shape[0]} nuclei.")
+        return {"n_spots": int(d["adata"].n_obs), "n_features": int(d["adata"].n_vars),
+                "n_cells": int(d["cells"].shape[0])}
+
+    return _guard(_do, sess, "DEMO")
+
+
 @app.get("/api/{sid}/image")
 def tissue_image(sid: str):
     sess = _session(sid)
@@ -816,6 +847,8 @@ def download(sid: str, artifact: str, prefix: str = "visium_analysis"):
         "stie_morphology": sess.stie.morphology if sess.stie else None,
         "stie_signature": sess.stie.signature if (sess.stie and sess.stie.signature is not None) else None,
         "stie_spot_proportions": sess.stie.spot_prop if sess.stie else None,
+        "demo_cells": getattr(sess, "_demo_cells", None),
+        "demo_signature": getattr(sess, "_demo_signature", None),
     }
     if artifact in tables:
         df = tables[artifact]

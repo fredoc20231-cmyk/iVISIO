@@ -103,6 +103,32 @@ docker compose up --build
 - Frontend: http://localhost:8080
 - Backend API docs: http://localhost:8000/docs
 
+### Try it with no data
+
+Don't have a Visium library handy? On the **Load** tab click **Load demo
+dataset** (or `POST /api/{session}/load-demo`). It generates a self-consistent
+synthetic library — spot grid, matched H&E-like image, nuclei with morphology,
+and a gene × cell-type signature — so you can exercise the entire workflow,
+including STIE, end to end. The generated cells and signature CSVs are
+downloadable to drive the STIE tab.
+
+## Testing & CI
+
+The backend ships a `pytest` suite (`backend/tests/`) that validates the STIE EM
+algorithm against synthetic ground truth (cell-type recovery, simplex
+proportions, gap-area recovery, clustering/CAGE), the NNLS deconvolution and AI
+annotation math, and a full demo-load → QC → normalize → cluster → markers →
+STIE workflow through the API.
+
+```bash
+cd backend
+pip install -r requirements-dev.txt
+pytest
+```
+
+GitHub Actions (`.github/workflows/ci.yml`) runs the backend tests and the
+frontend type-check + build on every push and pull request.
+
 ## Local development
 
 **Backend**

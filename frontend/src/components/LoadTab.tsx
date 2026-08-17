@@ -56,6 +56,18 @@ export default function LoadTab() {
             {busy ? "Loading…" : "Load Visium data"}
           </Button>
         </Card>
+
+        <Card title="No data handy?">
+          <p className="help">
+            Load a self-consistent synthetic Visium dataset — spots, a matched H&amp;E-like
+            image, nuclei with morphology, and a signature — to explore the entire platform,
+            including STIE, without uploading anything.
+          </p>
+          <Button className="btn-ghost btn-block" disabled={busy}
+                  onClick={() => sid && run(() => api.loadDemo(sid), "Demo dataset loaded.")}>
+            Load demo dataset
+          </Button>
+        </Card>
       </div>
 
       <div className="content">

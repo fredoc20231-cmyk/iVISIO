@@ -35,6 +35,8 @@ export const api = {
   load: async (sid: string, form: FormData) =>
     (await http.post(`/${sid}/load`, form)).data,
 
+  loadDemo: async (sid: string) => (await http.post(`/${sid}/load-demo`)).data,
+
   features: async (sid: string, q = ""): Promise<string[]> =>
     (await http.get(`/${sid}/features`, { params: { q, limit: 50 } })).data.features,
 
